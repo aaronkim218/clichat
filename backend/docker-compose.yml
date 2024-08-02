@@ -1,7 +1,6 @@
 services:
-  db:
+  postgres:
     image: postgres:latest
-    container_name: postgres-clichat
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
@@ -11,16 +10,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  db-client:
+  pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: pgadmin-clichat
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
       - "8080:80"
     depends_on:
-      - db
+      - postgres
 
 volumes:
   postgres_data:

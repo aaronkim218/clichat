@@ -1,8 +1,8 @@
 package room
 
 import (
+	"backend/model/client"
 	"fmt"
-	"server/model/client"
 )
 
 type Room struct {

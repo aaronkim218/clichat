@@ -1,11 +1,12 @@
 package controller
 
 import (
+	"backend/model/client"
+	"backend/model/hub"
 	"fmt"
-	"server/model/client"
-	"server/model/hub"
 
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 )
 
@@ -16,10 +17,11 @@ var (
 	}
 )
 
-func RegisterRoomsWSHandlers(ws *echo.Group, h *hub.Hub) {
-	rws := ws.Group("/rooms")
+func RegisterRoomsHandlers(api *echo.Group, ws *echo.Group, p *pgxpool.Pool, h *hub.Hub) {
+	// roomsAPI := api.Group("/rooms")
+	roomsWS := ws.Group("/rooms")
 
-	rws.GET("/:rid", func(c echo.Context) error {
+	roomsWS.GET("/:rid", func(c echo.Context) error {
 		rid := c.Param("rid")
 
 		conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)

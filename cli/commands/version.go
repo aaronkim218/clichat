@@ -3,18 +3,15 @@ package commands
 import (
 	"fmt"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 func Version() error {
-	err := godotenv.Load()
+	data, err := os.ReadFile("VERSION")
 	if err != nil {
 		return err
 	}
 
-	v := os.Getenv("VERSION")
-	fmt.Println(v)
+	fmt.Println(string(data))
 
 	return nil
 }

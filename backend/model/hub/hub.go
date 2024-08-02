@@ -1,9 +1,9 @@
 package hub
 
 import (
+	"backend/model/client"
+	"backend/model/room"
 	"fmt"
-	"server/model/client"
-	"server/model/room"
 	"sync"
 )
 
