@@ -2,9 +2,12 @@ package hub
 
 import (
 	"backend/model/client"
+	"backend/model/message"
 	"backend/model/room"
+	"backend/utils"
 	"fmt"
 	"sync"
+	"time"
 )
 
 type Hub struct {
@@ -14,23 +17,26 @@ type Hub struct {
 // load room from hub
 // retrieve room from db and add to hub and return room
 // for non-db load room from hub or create new room by default if id not found
-func (h *Hub) LoadRoom(rid string) *room.Room {
-	r, loaded := h.Rooms.LoadOrStore(rid, &room.Room{
-		ID:        rid,
-		Clients:   make(map[*client.Client]struct{}),
-		Broadcast: make(chan []byte),
-		Join:      make(chan *client.Client),
-		Leave:     make(chan *client.Client),
-	})
-
-	if !loaded {
-		go h.Run(r.(*room.Room))
+func (h *Hub) LoadRoom(rid string, rs *room.RoomStore, ms *message.MessageStore) (*room.Room, *utils.HTTPError) {
+	if r, ok := h.Rooms.Load(rid); ok {
+		go h.Run(r.(*room.Room), ms)
+		return r.(*room.Room), nil
 	}
 
-	return r.(*room.Room)
+	if r, httpErr := rs.SelectRoom(rid); httpErr != nil {
+		return nil, httpErr
+	} else {
+		r.Clients = make(map[*client.Client]struct{})
+		r.Broadcast = make(chan *message.Message)
+		r.Join = make(chan *client.Client)
+		r.Leave = make(chan *client.Client)
+		h.Rooms.Store(rid, r)
+		go h.Run(r, ms)
+		return r, nil
+	}
 }
 
-func (h *Hub) Run(r *room.Room) {
+func (h *Hub) Run(r *room.Room, ms *message.MessageStore) {
 	for {
 		select {
 		case c := <-r.Join:
@@ -45,8 +51,14 @@ func (h *Hub) Run(r *room.Room) {
 				return
 			}
 		case m := <-r.Broadcast:
+			m.Timestamp = time.Now()
+			msg, err := ms.InsertMessage(m)
+			if err != nil {
+				fmt.Println("error inserting msgs into db. shutting down")
+				return
+			}
 			for c := range r.Clients {
-				c.Write <- m
+				c.Write <- msg
 			}
 		}
 	}

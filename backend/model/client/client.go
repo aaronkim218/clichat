@@ -1,6 +1,7 @@
 package client
 
 import (
+	"backend/model/message"
 	"errors"
 	"fmt"
 
@@ -8,8 +9,9 @@ import (
 )
 
 type Client struct {
-	Conn  *websocket.Conn
-	Write chan []byte
+	Username string
+	Conn     *websocket.Conn
+	Write    chan *message.Message
 }
 
 func (c *Client) CloseConn() error {
@@ -27,8 +29,8 @@ func (c *Client) ReadConn() ([]byte, error) {
 	}
 }
 
-func (c *Client) WriteConn(m []byte) error {
-	if err := c.Conn.WriteMessage(websocket.TextMessage, m); err != nil {
+func (c *Client) WriteConn(m *message.Message) error {
+	if err := c.Conn.WriteJSON(m); err != nil {
 		fmt.Println(err.Error())
 		return errors.New("error writing to connection")
 	} else {

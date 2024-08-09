@@ -31,9 +31,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	e := echo.New()
-
 	h := new(hub.Hub)
+
+	e := echo.New()
 
 	controller.RegisterHandlers(e, p, h)
 

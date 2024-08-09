@@ -1,6 +1,7 @@
 package user
 
 import (
+	"backend/model/room"
 	"backend/utils"
 	"context"
 	"fmt"
@@ -102,4 +103,112 @@ func (us *UserStore) SelectUser(username string) (*User, *utils.HTTPError) {
 	}
 
 	return u, nil
+}
+
+func (us *UserStore) DeleteUser(username string) *utils.HTTPError {
+	tx, err := us.Pool.Begin(context.TODO())
+	if err != nil {
+		return &utils.HTTPError{
+			Code:    500,
+			Message: "Internal server error",
+		}
+	}
+	defer tx.Rollback(context.TODO())
+
+	exists, httpErr := checkUserExistsDB(context.TODO(), tx, username)
+	if httpErr != nil {
+		return httpErr
+	}
+
+	if !exists {
+		return &utils.HTTPError{
+			Code:    400,
+			Message: "user does not exist",
+		}
+	}
+
+	if rooms, httpErr := selectHostRoomsDB(context.TODO(), tx, username); httpErr != nil {
+		return httpErr
+	} else if len(rooms) > 0 {
+		return &utils.HTTPError{
+			Code:    400,
+			Message: "user is still host",
+		}
+	}
+
+	if httpErr := deleteUserFromUsersRoomsDB(context.TODO(), tx, username); httpErr != nil {
+		return httpErr
+	}
+
+	if httpErr := deleteUserDB(context.TODO(), tx, username); httpErr != nil {
+		return httpErr
+	}
+
+	if err := tx.Commit(context.TODO()); err != nil {
+		return &utils.HTTPError{
+			Code:    500,
+			Message: "Internal server error",
+		}
+	}
+
+	return nil
+}
+
+func deleteUserDB(ctx context.Context, tx pgx.Tx, username string) *utils.HTTPError {
+	if _, err := tx.Exec(ctx, "DELETE FROM users WHERE username = $1", username); err != nil {
+		return &utils.HTTPError{
+			Code:    500,
+			Message: "Internal server error",
+		}
+	}
+
+	return nil
+}
+
+func deleteUserFromUsersRoomsDB(ctx context.Context, tx pgx.Tx, username string) *utils.HTTPError {
+	if _, err := tx.Exec(ctx, "DELETE FROM users_rooms WHERE username = $1", username); err != nil {
+		return &utils.HTTPError{
+			Code:    500,
+			Message: "Internal server error",
+		}
+	}
+
+	return nil
+}
+
+func selectHostRoomsDB(ctx context.Context, tx pgx.Tx, username string) ([]*room.Room, *utils.HTTPError) {
+	query := `
+		SELECT room_id, host
+		FROM rooms
+		WHERE host = $1
+	`
+
+	rows, err := tx.Query(ctx, query, username)
+	if err != nil {
+		return nil, &utils.HTTPError{
+			Code:    500,
+			Message: "internal server error",
+		}
+	}
+
+	var rooms []*room.Room
+	for rows.Next() {
+		r := new(room.Room)
+		if err := rows.Scan(&r.ID, &r.Host); err != nil {
+			return nil, &utils.HTTPError{
+				Code:    500,
+				Message: "internal server error",
+			}
+		}
+		rooms = append(rooms, r)
+	}
+
+	if rows.Err() != nil {
+		return nil, &utils.HTTPError{
+			Code:    500,
+			Message: "internal server error",
+		}
+	}
+
+	return rooms, nil
 }

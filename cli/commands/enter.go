@@ -1,26 +1,50 @@
 package commands
 
 import (
+	"cli/utils"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/gorilla/websocket"
 	"github.com/rivo/tview"
 )
 
+type Message struct {
+	Index     int       `json:"index"`
+	RoomID    string    `json:"room_id"`
+	Timestamp time.Time `json:"timestamp"`
+	UserID    string    `json:"user_id"`
+	Content   string    `json:"content"`
+}
+
 func Enter(rid string) {
+	cookie := utils.LoadCookie()
+	headers := http.Header{}
+	headers.Add("Cookie", cookie.String())
+
 	dialer := websocket.DefaultDialer
-	conn, _, err := dialer.Dial("ws://localhost:42069/ws/rooms/"+rid, nil)
+	conn, resp, err := dialer.Dial("ws://localhost:42069/api/rooms/"+rid+"/ws", headers)
 	if err != nil {
 		fmt.Println(err.Error())
+		if resp != nil {
+			// catch room does not exist err and display message
+			fmt.Println("TODO")
+		}
 		return
 	}
 	defer conn.Close()
 
 	app := tview.NewApplication()
 
+	history, _ := getHistory(rid, &headers)
+
 	textView := tview.NewTextView().
-		SetText("").
+		SetText(history).
 		SetDynamicColors(true).
 		SetWordWrap(true).
 		SetScrollable(true)
@@ -49,7 +73,7 @@ func Enter(rid string) {
 		AddItem(input, 1, 0, true)
 
 	modeChan := make(chan string)
-	msgs := make(chan []byte)
+	msgs := make(chan *Message)
 	go manageView(app, textView, msgs, modeChan)
 	go readPump(conn, msgs)
 
@@ -80,7 +104,7 @@ func Enter(rid string) {
 	}
 }
 
-func manageView(app *tview.Application, textView *tview.TextView, msgs chan []byte, modeChan chan string) {
+func manageView(app *tview.Application, textView *tview.TextView, msgs chan *Message, modeChan chan string) {
 	mode := ""
 
 	for {
@@ -90,7 +114,7 @@ func manageView(app *tview.Application, textView *tview.TextView, msgs chan []by
 		case msg := <-msgs:
 
 			app.QueueUpdateDraw(func() {
-				textView.Write(append(msg, '\n'))
+				textView.Write(append([]byte(formatMessage((msg))), '\n'))
 				if mode != "r" {
 					textView.ScrollToEnd()
 				}
@@ -99,15 +123,68 @@ func manageView(app *tview.Application, textView *tview.TextView, msgs chan []by
 	}
 }
 
-func readPump(conn *websocket.Conn, msgs chan []byte) {
+func readPump(conn *websocket.Conn, msgs chan *Message) {
 	defer close(msgs)
 
+	// need to change this to ReadJSON
 	for {
-		_, m, err := conn.ReadMessage()
+		m := new(Message)
+		err := conn.ReadJSON(m)
 		if err != nil {
 			fmt.Println("readPump error:", err.Error())
 			return
 		}
 		msgs <- m
 	}
+}
+
+func formatMessage(m *Message) string {
+	return fmt.Sprintf("%s: %s", m.UserID, m.Content)
+}
+
+func getHistory(rid string, headers *http.Header) (string, error) {
+	url := "http://localhost:42069/api/rooms/" + rid + "/messages"
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		fmt.Println("error creating new request")
+		return "", err
+	}
+
+	req.Header = *headers
+
+	client := &http.Client{}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("error making request", err.Error())
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("unexpected status code")
+		return "", err
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("error reading body")
+		return "", err
+	}
+
+	var response []Message
+	err = json.Unmarshal(respBody, &response)
+	if err != nil {
+		fmt.Println("error unmarshalling data")
+		return "", err
+	}
+
+	history := ""
+	for _, msg := range response {
+		fmt.Println("user:" + msg.UserID)
+		history = history + formatMessage(&msg) + "\n"
+	}
+
+	return history, nil
 }

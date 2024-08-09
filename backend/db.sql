@@ -16,7 +16,7 @@ CREATE TABLE messages (
     author VARCHAR,
     content TEXT,
     FOREIGN KEY (room_id) REFERENCES rooms(room_id),
-    FOREIGN KEY (author) REFERENCES users(username)
+    FOREIGN KEY (author) REFERENCES users(username) ON DELETE SET NULL;
 );
 
 CREATE INDEX idx_messages_room_id_timestamp ON messages(room_id, timestamp);

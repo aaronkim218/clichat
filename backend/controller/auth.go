@@ -2,7 +2,6 @@ package controller
 
 import (
 	"backend/model/user"
-	"os"
 
 	"github.com/gorilla/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,16 +9,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func RegisterAuthHandlers(api *echo.Group, p *pgxpool.Pool) {
+func RegisterAuthHandlers(api *echo.Group, p *pgxpool.Pool, store *sessions.CookieStore) {
 	auth := api.Group("/auth")
 
 	us := user.UserStore{
 		Pool: p,
-	}
-
-	store := sessions.NewCookieStore([]byte(os.Getenv("AUTHENTICATION_KEY")))
-	store.Options = &sessions.Options{
-		HttpOnly: true,
 	}
 
 	auth.POST("/login", func(c echo.Context) error {
